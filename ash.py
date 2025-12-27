@@ -2,25 +2,30 @@ import tkinter as tk
 import time
 import random
 
+# ===== 基本設定 =====
 SIZE = 300
 CELL = 100
-LINE_WIDTH = 4
+TIME_LIMIT = 30
 
 root = tk.Tk()
-root.title("OOXX 對戰電腦")
+root.title("OOXX 限時對戰（玩家 vs 電腦）")
 
-canvas = tk.Canvas(root, width=SIZE, height=SIZE + 40, bg="white")
+canvas = tk.Canvas(root, width=SIZE, height=SIZE + 80, bg="white")
 canvas.pack()
 
+# ===== 遊戲狀態 =====
 board = [["" for _ in range(3)] for _ in range(3)]
 game_over = False
 start_time = time.time()
+score = {"O": 0, "X": 0}
 
+# ===== 畫棋盤 =====
 def draw_board():
     for i in range(1, 3):
-        canvas.create_line(i * CELL, 0, i * CELL, SIZE, width=LINE_WIDTH)
-        canvas.create_line(0, i * CELL, SIZE, i * CELL, width=LINE_WIDTH)
+        canvas.create_line(i * CELL, 0, i * CELL, SIZE, width=4)
+        canvas.create_line(0, i * CELL, SIZE, i * CELL, width=4)
 
+# ===== 畫棋子 =====
 def draw_o(r, c):
     canvas.create_oval(
         c * CELL + 20, r * CELL + 20,
@@ -40,37 +45,44 @@ def draw_x(r, c):
         width=4, fill="red"
     )
 
+# ===== 檢查勝負 =====
 def check_winner():
-    lines = []
-
     for i in range(3):
-        lines.append([(i,0),(i,1),(i,2)])
-        lines.append([(0,i),(1,i),(2,i)])
+        if board[i][0] == board[i][1] == board[i][2] != "":
+            return board[i][0]
+        if board[0][i] == board[1][i] == board[2][i] != "":
+            return board[0][i]
 
-    lines.append([(0,0),(1,1),(2,2)])
-    lines.append([(0,2),(1,1),(2,0)])
+    if board[0][0] == board[1][1] == board[2][2] != "":
+        return board[0][0]
+    if board[0][2] == board[1][1] == board[2][0] != "":
+        return board[0][2]
 
-    for line in lines:
-        a,b,c = line
-        if board[a[0]][a[1]] == board[b[0]][b[1]] == board[c[0]][c[1]] != "":
-            return board[a[0]][a[1]], line
-    return None, None
+    return None
 
-def draw_win_line(line):
-    (r1,c1),_,(r3,c3) = line
-    canvas.create_line(
-        c1*CELL+50, r1*CELL+50,
-        c3*CELL+50, r3*CELL+50,
-        width=6, fill="green"
+# ===== 電腦下棋 =====
+def computer_move():
+    empty = [(r, c) for r in range(3) for c in range(3) if board[r][c] == ""]
+    if empty:
+        r, c = random.choice(empty)
+        board[r][c] = "X"
+        draw_x(r, c)
+
+# ===== 更新資訊 =====
+def update_info():
+    canvas.delete("info")
+    left = TIME_LIMIT - int(time.time() - start_time)
+    canvas.create_text(
+        SIZE / 2, SIZE + 20,
+        text=f"剩餘時間：{left}s   玩家(O)：{score['O']}  電腦(X)：{score['X']}",
+        font=("Arial", 12),
+        tags="info"
     )
 
-def computer_move():
-    empty = [(r,c) for r in range(3) for c in range(3) if board[r][c] == ""]
-    if empty:
-        r,c = random.choice(empty)
-        board[r][c] = "X"
-        draw_x(r,c)
+    if left <= 0 and not game_over:
+        end_game("時間到！")
 
+# ===== 滑鼠點擊 =====
 def click(event):
     global game_over
 
@@ -78,42 +90,46 @@ def click(event):
         restart()
         return
 
-    c = event.x // CELL
     r = event.y // CELL
-    if r>=3 or c>=3 or board[r][c]!="":
+    c = event.x // CELL
+
+    if r >= 3 or c >= 3 or board[r][c] != "":
         return
 
+    # 玩家下 O
     board[r][c] = "O"
-    draw_o(r,c)
+    draw_o(r, c)
 
-    winner, line = check_winner()
+    winner = check_winner()
     if winner:
-        draw_win_line(line)
-        show_result("你贏了！")
+        score[winner] += 1
+        end_game("你贏了！")
         return
 
+    # 電腦下 X
     computer_move()
 
-    winner, line = check_winner()
+    winner = check_winner()
     if winner:
-        draw_win_line(line)
-        show_result("電腦獲勝！")
+        score[winner] += 1
+        end_game("電腦獲勝！")
         return
 
     if all(board[r][c] != "" for r in range(3) for c in range(3)):
-        show_result("平手！")
+        end_game("平手！")
 
-def show_result(text):
+# ===== 結束遊戲 =====
+def end_game(text):
     global game_over
     game_over = True
-    t = int(time.time() - start_time)
     canvas.create_text(
-        SIZE/2, SIZE/2,
-        text=f"{text}\n耗時 {t} 秒\n點擊重新開始",
-        font=("Arial",16),
+        SIZE / 2, SIZE / 2,
+        text=f"{text}\n點擊重新開始",
+        font=("Arial", 16),
         fill="purple"
     )
 
+# ===== 重新開始 =====
 def restart():
     global board, game_over, start_time
     canvas.delete("all")
@@ -121,7 +137,16 @@ def restart():
     game_over = False
     start_time = time.time()
     draw_board()
+    update_info()
 
+# ===== 啟動 =====
 canvas.bind("<Button-1>", click)
 draw_board()
+update_info()
+
+def timer():
+    update_info()
+    root.after(1000, timer)
+
+timer()
 root.mainloop()
